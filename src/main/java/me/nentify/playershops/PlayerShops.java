@@ -45,8 +45,6 @@ public class PlayerShops {
 
     @Listener
     public void onPreInit(GamePreInitializationEvent event) {
-        logger.info("Starting " + PLUGIN_NAME + " v" + PLUGIN_VERSION);
-
         instance = this;
 
         Sponge.getDataManager().register(PlayerShopData.class, ImmutablePlayerShopData.class, new PlayerShopDataManipulatorBuilder());
