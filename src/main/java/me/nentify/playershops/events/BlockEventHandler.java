@@ -91,7 +91,7 @@ public class BlockEventHandler {
     }
 
     @Listener
-    public void onBlockInteract(InteractBlockEvent.Secondary.MainHand event, @Root Player player) {
+    public void onBlockInteract(InteractBlockEvent.Secondary event, @Root Player player) {
         Optional<Location<World>> blockLoc = event.getTargetBlock().getLocation();
 
         if (blockLoc.isPresent()) {

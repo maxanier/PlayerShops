@@ -8,7 +8,6 @@ import org.spongepowered.api.command.CommandResult;
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
 import org.spongepowered.api.command.spec.CommandExecutor;
-import org.spongepowered.api.data.type.HandTypes;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.service.economy.Currency;
@@ -29,7 +28,7 @@ public class ShopCommand implements CommandExecutor {
         if (src instanceof Player) {
             Player player = (Player) src;
 
-            Optional<ItemStack> itemStackOptional = player.getItemInHand(HandTypes.MAIN_HAND);
+            Optional<ItemStack> itemStackOptional = player.getItemInHand();
 
             if (itemStackOptional.isPresent()) {
                 ItemStack itemStack = itemStackOptional.get();
