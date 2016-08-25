@@ -8,7 +8,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.2-SNAPSHOT'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-20160116.192356-17'
     }
 }
 
@@ -34,11 +34,11 @@ sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
 
 minecraft {
-    forgeVersion = '2052'
-    mappings = 'snapshot_20160628'
+    forgeVersion = '1890'
+    mappings = 'stable_22'
     runDir = 'run'
 }
 
 dependencies {
-    compile('org.spongepowered:spongeforge:1.10.2-2052-5.0.0-BETA-1675:dev')
+    compile('org.spongepowered:spongeapi:4.2.0-SNAPSHOT')
 }
