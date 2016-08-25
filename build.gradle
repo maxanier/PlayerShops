@@ -20,7 +20,7 @@ plugins {
 apply plugin: 'net.minecraftforge.gradle.forge'
 
 group = 'me.nentify.playershops'
-version = '1.10.2-1.0.0'
+version = '1.8.9-1.0.0'
 description = 'Allows players to create shops'
 
 repositories {
