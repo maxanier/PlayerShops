@@ -2,7 +2,7 @@ package me.nentify.playershops.events;
 
 import me.nentify.playershops.PlayerShops;
 import me.nentify.playershops.ShopType;
-import me.nentify.playershops.Utils.ChestUtils;
+import me.nentify.playershops.utils.ChestUtils;
 import me.nentify.playershops.data.PlayerShopData;
 import net.minecraft.inventory.IInventory;
 import org.spongepowered.api.Sponge;
