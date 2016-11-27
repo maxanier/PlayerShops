@@ -21,7 +21,7 @@ apply plugin: 'net.minecraftforge.gradle.forge'
 
 archivesBaseName = 'PlayerShops'
 group = 'me.nentify.playershops'
-version = '1.10.2-1.1.1'
+version = '1.10.2-1.1.2'
 description = 'Allows players to create shops'
 
 repositories {
@@ -35,11 +35,11 @@ sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
 
 minecraft {
-    forgeVersion = '2052'
+    forgeVersion = '2099'
     mappings = 'snapshot_20160628'
     runDir = 'run'
 }
 
 dependencies {
-    compile('org.spongepowered:spongeapi:5.0.0-SNAPSHOT')
+    compile('org.spongepowered:spongeapi:5.1.0-SNAPSHOT')
 }

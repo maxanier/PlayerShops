@@ -111,10 +111,7 @@ public class PlayerShopData extends AbstractData<PlayerShopData, ImmutablePlayer
         return new ImmutablePlayerShopData(shopType, item, price, quantity, ownerUuid);
     }
 
-    @Override
-    public int compareTo(PlayerShopData o) {
-        return 0;
-    }
+
 
     @Override
     public int getContentVersion() {
