@@ -29,7 +29,6 @@ import org.spongepowered.api.service.economy.Currency;
 import org.spongepowered.api.service.economy.account.UniqueAccount;
 import org.spongepowered.api.service.economy.transaction.ResultType;
 import org.spongepowered.api.service.economy.transaction.TransactionResult;
-import org.spongepowered.api.service.economy.transaction.TransferResult;
 import org.spongepowered.api.service.user.UserStorageService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
@@ -38,12 +37,137 @@ import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
 import java.math.BigDecimal;
-import java.util.ConcurrentModificationException;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public class BlockEventHandler {
+
+    @Listener
+    public void onBlockInteract(InteractBlockEvent.Secondary.MainHand event, @Root Player player) {
+        Optional<Location<World>> blockLoc = event.getTargetBlock().getLocation();
+
+        if (blockLoc.isPresent()) {
+            Optional<TileEntity> tileEntity = blockLoc.get().getTileEntity();
+
+            if (tileEntity.isPresent() && tileEntity.get() instanceof Sign) {
+                Sign sign = (Sign) tileEntity.get();
+
+                Optional<PlayerShopData> playerShopDataOptional = sign.get(PlayerShopData.class);
+
+                if (playerShopDataOptional.isPresent()) {
+                    if (player.get(Keys.IS_SNEAKING).orElse(false)) {
+                        player.sendMessage(Text.of(TextColors.RED, "You can not use this sign while sneaking"));
+                        return;
+                    }
+
+                    PlayerShopData playerShopData = playerShopDataOptional.get();
+
+                    ShopType shopType = playerShopData.getShopType();
+                    ItemStack item = playerShopData.item().get().copy();
+                    BigDecimal price = BigDecimal.valueOf(playerShopData.price().get());
+                    int quantity = playerShopData.quantity().get();
+                    UUID ownerUuid = playerShopData.getOwnerUuid();
+
+                    if (player.getUniqueId().equals(ownerUuid)) {
+                        player.sendMessage(Text.of(TextColors.RED, "You can't use your own shop, silly!"));
+                        return;
+                    }
+
+                    item.setQuantity(quantity);
+
+                    Optional<UniqueAccount> account = PlayerShops.instance.economyService.getOrCreateAccount(player.getUniqueId());
+                    Optional<UniqueAccount> ownerAccount = PlayerShops.instance.economyService.getOrCreateAccount(ownerUuid);
+
+                    if (account.isPresent() && ownerAccount.isPresent()) {
+                        Currency defaultCurrency = PlayerShops.instance.economyService.getDefaultCurrency();
+
+                        UserStorageService userStorage = Sponge.getServiceManager().provideUnchecked(UserStorageService.class);
+                        Optional<User> ownerOptional = userStorage.get(ownerUuid);
+
+                        if (ownerOptional.isPresent()) {
+                            User owner = ownerOptional.get();
+
+                            if (player.get(Keys.IS_SNEAKING).orElse(false)) {
+                                player.sendMessage(Text.of(TextColors.AQUA, "This shop is owned by ", owner.getName()));
+                            } else {
+                                IInventory inv = getInventory(blockLoc.get(), player);
+
+                                if (inv != null) {
+
+                                    if (shopType == ShopType.BUY) {
+                                        if (ChestUtils.hasQuantityOfItems(inv, item, quantity)) {
+                                            if ((player.getInventory().size() < player.getInventory().capacity())) {
+                                                ResultType result = EconomyUtils.transferWithTax(
+                                                        account.get(),
+                                                        ownerAccount.get(),
+                                                        defaultCurrency,
+                                                        price,
+                                                        BigDecimal.valueOf(Configuration.tax),
+                                                        Cause.source(PlayerShops.instance).build()
+                                                );
+
+                                                if (result == ResultType.SUCCESS) {
+                                                    ChestUtils.removeItems(inv, item);
+                                                    player.getInventory().offer(item);
+                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", item, " for ", defaultCurrency.format(price), " from ", owner.getName()));
+                                                } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
+                                                    player.sendMessage(Text.of(TextColors.RED, "You don't have enough money to buy this"));
+                                                } else if (result == ResultType.ACCOUNT_NO_SPACE) {
+                                                    player.sendMessage(Text.of(TextColors.RED, owner.getName(), "'s account is full"));
+                                                } else {
+                                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
+                                                }
+                                            } else {
+                                                player.sendMessage(Text.of(TextColors.RED, "You do not have enough inventory space to buy from ", owner.getName(), "'s shop"));
+                                            }
+                                        } else {
+                                            player.sendMessage(Text.of(TextColors.RED, owner.getName(), " has run out of stock"));
+                                        }
+                                    } else {
+                                        Inventory inventoryStacks = player.getInventory().query(item);
+                                        Optional<ItemStack> peek = inventoryStacks.peek(quantity);
+
+                                        if (peek.isPresent() && peek.get().getQuantity() >= quantity) {
+                                            Optional<Integer> slotWithSpace = ChestUtils.getSlotWithSpaceForItem(inv, item, quantity);
+
+                                            if (slotWithSpace.isPresent()) {
+                                                BigDecimal tax = BigDecimal.valueOf(Configuration.tax);
+
+                                                ResultType result = EconomyUtils.transferWithTax(
+                                                        ownerAccount.get(),
+                                                        account.get(),
+                                                        defaultCurrency,
+                                                        price,
+                                                        tax,
+                                                        Cause.source(PlayerShops.instance).build()
+                                                );
+
+                                                if (result == ResultType.SUCCESS) {
+                                                    inventoryStacks.poll(quantity);
+                                                    ChestUtils.addItemsToSlot(inv, slotWithSpace.get(), item);
+                                                    player.sendMessage(Text.of(TextColors.GREEN, "Sold ", quantity, " ", item, " for ", defaultCurrency.format(price), " to ", owner.getName()));
+                                                } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
+                                                    player.sendMessage(Text.of(TextColors.RED, "The shop owner has run out of money"));
+                                                } else if (result == ResultType.ACCOUNT_NO_SPACE) {
+                                                    player.sendMessage(Text.of(TextColors.RED, "Your account is full!"));
+                                                } else {
+                                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
+                                                }
+                                            } else {
+                                                player.sendMessage(Text.of(TextColors.RED, owner.getName(), "'s shop has run out of space"));
+                                            }
+                                        } else {
+                                            player.sendMessage(Text.of(TextColors.RED, "You do not have ", quantity, " ", item, " to sell"));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @Listener
     public void onBlockPlace(ChangeBlockEvent.Place event, @Root Player player) {
@@ -95,7 +219,7 @@ public class BlockEventHandler {
                                 );
 
                                 if (result.getResult() == ResultType.ACCOUNT_NO_FUNDS) {
-                                    player.sendMessage(Text.of(TextColors.RED, "You need ", defaultCurrency.format(BigDecimal.valueOf(creationCost)) ," to create a shop"));
+                                    player.sendMessage(Text.of(TextColors.RED, "You need ", defaultCurrency.format(BigDecimal.valueOf(creationCost)), " to create a shop"));
                                     return;
                                 } else if (result.getResult() != ResultType.SUCCESS) {
                                     player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
@@ -122,134 +246,37 @@ public class BlockEventHandler {
             event.setCancelled(true);
     }
 
-    @Listener
-    public void onBlockInteract(InteractBlockEvent.Secondary.MainHand event, @Root Player player) {
-        Optional<Location<World>> blockLoc = event.getTargetBlock().getLocation();
-
-        if (blockLoc.isPresent()) {
-            Optional<TileEntity> tileEntity = blockLoc.get().getTileEntity();
-
-            if (tileEntity.isPresent() && tileEntity.get() instanceof Sign) {
-                Sign sign = (Sign) tileEntity.get();
-
-                Optional<PlayerShopData> playerShopDataOptional = sign.get(PlayerShopData.class);
-
-                if (playerShopDataOptional.isPresent()) {
-                    if (player.get(Keys.IS_SNEAKING).orElse(false)) {
-                        player.sendMessage(Text.of(TextColors.RED, "You can not use this sign while sneaking"));
-                        return;
-                    }
-
-                    PlayerShopData playerShopData = playerShopDataOptional.get();
-
-                    ShopType shopType = playerShopData.getShopType();
-                    ItemStack item = playerShopData.item().get().copy();
-                    BigDecimal price = BigDecimal.valueOf(playerShopData.price().get());
-                    int quantity = playerShopData.quantity().get();
-                    UUID ownerUuid = playerShopData.getOwnerUuid();
-
-                    if (player.getUniqueId().equals(ownerUuid)) {
-                        player.sendMessage(Text.of(TextColors.RED, "You can't use your own shop, silly!"));
-                        return;
-                    }
-
-                    item.setQuantity(quantity);
-
-                    Optional<UniqueAccount> account = PlayerShops.instance.economyService.getOrCreateAccount(player.getUniqueId());
-                    Optional<UniqueAccount> ownerAccount = PlayerShops.instance.economyService.getOrCreateAccount(ownerUuid);
-
-                    if (account.isPresent() && ownerAccount.isPresent()) {
-                        Currency defaultCurrency = PlayerShops.instance.economyService.getDefaultCurrency();
-
-                        UserStorageService userStorage = Sponge.getServiceManager().provideUnchecked(UserStorageService.class);
-                        Optional<User> ownerOptional = userStorage.get(ownerUuid);
-
-                        if (ownerOptional.isPresent()) {
-                            User owner = ownerOptional.get();
-
-                            if (player.get(Keys.IS_SNEAKING).orElse(false)) {
-                                player.sendMessage(Text.of(TextColors.AQUA, "This shop is owned by ", owner.getName()));
-                            } else {
-                                Location<World> blockDown = blockLoc.get().getBlockRelative(Direction.DOWN);
-                                Optional<TileEntity> te = blockDown.getTileEntity();
-
-                                if (te.isPresent() && te.get() instanceof IInventory) {
-                                    IInventory inv = (IInventory) te.get();
-
-                                    if (shopType == ShopType.BUY) {
-                                        if (ChestUtils.hasQuantityOfItems(inv, item, quantity)) {
-                                            if ((player.getInventory().size() < player.getInventory().capacity())) {
-                                                ResultType result = EconomyUtils.transferWithTax(
-                                                        account.get(),
-                                                        ownerAccount.get(),
-                                                        defaultCurrency,
-                                                        price,
-                                                        BigDecimal.valueOf(Configuration.tax),
-                                                        Cause.source(PlayerShops.instance).build()
-                                                );
-
-                                                if (result == ResultType.SUCCESS) {
-                                                    ChestUtils.removeItems(inv, item);
-                                                    player.getInventory().offer(item);
-                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", item, " for ", defaultCurrency.format(price), " from ", owner.getName()));
-                                                } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
-                                                    player.sendMessage(Text.of(TextColors.RED, "You don't have enough money to buy this"));
-                                                } else if (result == ResultType.ACCOUNT_NO_SPACE) {
-                                                    player.sendMessage(Text.of(TextColors.RED, owner.getName(), "'s account is full"));
-                                                } else {
-                                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
-                                                }
-                                            } else {
-                                                player.sendMessage(Text.of(TextColors.RED, "You do not have enough inventory space to buy from ", owner.getName(), "'s shop"));
-                                            }
-                                        } else {
-                                            player.sendMessage(Text.of(TextColors.RED, owner.getName(), " has run out of stock"));
-                                        }
-                                    } else {
-                                        Inventory inventoryStacks = player.getInventory().query(item);
-                                        Optional<ItemStack> peek = inventoryStacks.peek(quantity);
-
-                                        if (peek.isPresent() && peek.get().getQuantity() >= quantity) {
-                                            Optional<Integer> slotWithSpace = ChestUtils.getSlotWithSpaceForItem(inv, item, quantity);
-
-                                            if (slotWithSpace.isPresent()) {
-                                                BigDecimal tax = BigDecimal.valueOf(Configuration.tax);
-
-                                                ResultType result = EconomyUtils.transferWithTax(
-                                                        account.get(),
-                                                        ownerAccount.get(),
-                                                        defaultCurrency,
-                                                        price,
-                                                        tax,
-                                                        Cause.source(PlayerShops.instance).build()
-                                                );
-
-                                                if (result == ResultType.SUCCESS) {
-                                                    inventoryStacks.poll(quantity);
-                                                    ChestUtils.addItemsToSlot(inv, slotWithSpace.get(), item);
-                                                    player.sendMessage(Text.of(TextColors.GREEN, "Sold ", quantity, " ", item, " for ", defaultCurrency.format(price), " to ", owner.getName()));
-                                                } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
-                                                    player.sendMessage(Text.of(TextColors.RED, "The shop owner has run out of money"));
-                                                } else if (result == ResultType.ACCOUNT_NO_SPACE) {
-                                                    player.sendMessage(Text.of(TextColors.RED, "Your account is full!"));
-                                                } else {
-                                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
-                                                }
-                                            } else {
-                                                player.sendMessage(Text.of(TextColors.RED, owner.getName(), "'s shop has run out of space"));
-                                            }
-                                        } else {
-                                            player.sendMessage(Text.of(TextColors.RED, "You do not have ", quantity, " ", item, " to sell"));
-                                        }
-                                    }
-                                } else {
-                                    player.sendMessage(Text.of(TextColors.RED, "No chest was found under the sign for ", owner.getName(), "'s shop"));
-                                }
-                            }
-                        }
-                    }
-                }
+    private IInventory getInventory(Location<World> blockLoc, Player player) {
+        if (Configuration.chestBelow) {
+            Location<World> blockDown = blockLoc.getBlockRelative(Direction.DOWN);
+            Optional<TileEntity> te = blockDown.getTileEntity();
+            if (te.isPresent() && te.get() instanceof IInventory) {
+                return (IInventory) te.get();
             }
         }
+        if (Configuration.chestBehind) {
+            Optional<Direction> dir = blockLoc.getBlock().get(Keys.DIRECTION);
+            if (dir.isPresent()) {
+                Location<World> blockBehind = blockLoc.getBlockRelative(dir.get().getOpposite());
+                Optional<TileEntity> te = blockBehind.getTileEntity();
+                if (te.isPresent() && te.get() instanceof IInventory) {
+                    return (IInventory) te.get();
+                }
+            } else {
+                player.sendMessage(Text.of(TextColors.RED, "Failed to determine direction of sign"));
+            }
+        }
+        String s;
+        if (Configuration.chestBehind && Configuration.chestBelow) {
+            s = "The sign has to be in front or on top of the chest";
+        } else if (Configuration.chestBelow) {
+            s = "The sign has to be on top of the chest";
+        } else if (Configuration.chestBehind) {
+            s = "The sign has to be in front of the chest";
+        } else {
+            s = "This plugin is configured wrong. Either chestBehind or chestBelow has to be activated, or both";
+        }
+        player.sendMessage(Text.of(TextColors.RED, s));
+        return null;
     }
 }

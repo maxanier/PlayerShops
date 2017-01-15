@@ -27,6 +27,10 @@ public class ShopCommand implements CommandExecutor {
         Optional<Integer> quantityOptional = args.getOne("quantity");
 
         if (src instanceof Player) {
+            if (PlayerShops.instance.economyService == null) {
+                src.sendMessage(Text.of(TextColors.RED, "No economy plugin is installed"));
+                return CommandResult.success();
+            }
             Player player = (Player) src;
 
             Optional<ItemStack> itemStackOptional = player.getItemInHand(HandTypes.MAIN_HAND);

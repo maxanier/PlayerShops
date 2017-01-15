@@ -13,7 +13,7 @@ public class ChestUtils {
         }
 
         for (int i = 0; i < inv.getSizeInventory(); i++) {
-            if (inv.getStackInSlot(i) == null) {
+            if (inv.getStackInSlot(i).isEmpty()) {
                 return Optional.of(i);
             }
 
@@ -32,14 +32,14 @@ public class ChestUtils {
     public static void addItemsToSlot(IInventory inv, int slot, ItemStack itemStack) {
         net.minecraft.item.ItemStack stack = inv.getStackInSlot(slot);
 
-        if (stack == null) {
+        if (stack.isEmpty()) {
             inv.setInventorySlotContents(slot, ItemUtils.convertFromSponge(itemStack));
         } else {
             net.minecraft.item.ItemStack stackInSlot = inv.getStackInSlot(slot).copy();
-            stackInSlot.stackSize = stackInSlot.stackSize + itemStack.getQuantity();
+            stackInSlot.setCount(stackInSlot.getCount() + itemStack.getQuantity());
             inv.setInventorySlotContents(slot, stackInSlot);
 
-            System.out.println(stackInSlot.stackSize + " " + itemStack.getQuantity());
+            System.out.println(stackInSlot.getCount() + " " + itemStack.getQuantity());
         }
     }
 
@@ -47,8 +47,8 @@ public class ChestUtils {
         int total = 0;
 
         for (int i = 0; i < inv.getSizeInventory(); i++) {
-            if (inv.getStackInSlot(i) != null) {
-                net.minecraft.item.ItemStack stackInSlot = inv.getStackInSlot(i);
+            net.minecraft.item.ItemStack stackInSlot = inv.getStackInSlot(i);
+            if (!stackInSlot.isEmpty()) {
 
                 ItemStack chestStack = ItemUtils.convertToSponge(stackInSlot);
 
@@ -68,17 +68,16 @@ public class ChestUtils {
         int toRemove = itemStack.getQuantity();
 
         for (int i = 0; i < inv.getSizeInventory(); i++) {
-            if (inv.getStackInSlot(i) != null) {
-                net.minecraft.item.ItemStack stackInSlot = inv.getStackInSlot(i);
-
+            net.minecraft.item.ItemStack stackInSlot = inv.getStackInSlot(i);
+            if (!stackInSlot.isEmpty()) {
                 ItemStack chestStack = ItemUtils.convertToSponge(stackInSlot);
 
                 if (ItemUtils.equal(itemStack, chestStack)) {
-                    if (stackInSlot.stackSize >= toRemove) {
+                    if (stackInSlot.getCount() >= toRemove) {
                         inv.decrStackSize(i, toRemove);
                         return;
                     } else {
-                        toRemove = toRemove - stackInSlot.stackSize;
+                        toRemove = toRemove - stackInSlot.getCount();
                         inv.setInventorySlotContents(i, null);
                     }
                 }
