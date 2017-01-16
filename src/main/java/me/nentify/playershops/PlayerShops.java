@@ -7,11 +7,7 @@ import me.nentify.playershops.data.ImmutablePlayerShopData;
 import me.nentify.playershops.data.PlayerShopData;
 import me.nentify.playershops.data.PlayerShopDataManipulatorBuilder;
 import me.nentify.playershops.events.BlockEventHandler;
-import ninja.leaping.configurate.commented.CommentedConfigurationNode;
-import ninja.leaping.configurate.loader.ConfigurationLoader;
-import ninja.leaping.configurate.objectmapping.ObjectMappingException;
 import org.slf4j.Logger;
-import org.spongepowered.api.GameRegistry;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandSpec;
@@ -23,7 +19,6 @@ import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.service.economy.EconomyService;
 import org.spongepowered.api.text.Text;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,20 +32,37 @@ public class PlayerShops {
     public static final String PLUGIN_NAME = "Player Shops";
 
     public static PlayerShops instance;
+    // Stores shop data after a player uses the /shop command to be later put on to a sign placed by the player
+    public static Map<UUID, PlayerShopData> playerShopData = new HashMap<>();
 
+    public static void addPlayerShopData(UUID uuid, PlayerShopData data) {
+        playerShopData.put(uuid, data);
+    }
+
+    public static Optional<PlayerShopData> takePlayerShopData(UUID uuid) {
+        if (playerShopData.containsKey(uuid)) {
+            PlayerShopData data = playerShopData.get(uuid);
+            playerShopData.remove(uuid);
+            return Optional.of(data);
+        }
+
+        return Optional.empty();
+    }
+
+    public Configuration configuration;
+    @Inject
+    public Logger logger;
+    public EconomyService economyService;
     @Inject
     @DefaultConfig(sharedRoot = true)
     private Path configPath;
 
-    public Configuration configuration;
-
-    @Inject
-    public Logger logger;
-
-    public EconomyService economyService;
-
-    // Stores shop data after a player uses the /shop command to be later put on to a sign placed by the player
-    public static Map<UUID, PlayerShopData> playerShopData = new HashMap<>();
+    @Listener
+    public void onChangeServiceProvider(ChangeServiceProviderEvent event) {
+        if (event.getService().equals(EconomyService.class)) {
+            economyService = (EconomyService) event.getNewProviderRegistration().getProvider();
+        }
+    }
 
     @Listener
     public void onPreInit(GamePreInitializationEvent event) {
@@ -74,30 +86,10 @@ public class PlayerShops {
                         GenericArguments.doubleNum(Text.of("price")),
                         GenericArguments.optional(GenericArguments.integer(Text.of("quantity")))
                 )
+                .permission(PLUGIN_ID + ".create")
                 .executor(new ShopCommand())
                 .build();
 
         Sponge.getCommandManager().register(this, shopCommand, "shop");
-    }
-
-    @Listener
-    public void onChangeServiceProvider(ChangeServiceProviderEvent event) {
-        if (event.getService().equals(EconomyService.class)) {
-            economyService = (EconomyService) event.getNewProviderRegistration().getProvider();
-        }
-    }
-
-    public static void addPlayerShopData(UUID uuid, PlayerShopData data) {
-        playerShopData.put(uuid, data);
-    }
-
-    public static Optional<PlayerShopData> takePlayerShopData(UUID uuid) {
-        if (playerShopData.containsKey(uuid)) {
-            PlayerShopData data = playerShopData.get(uuid);
-            playerShopData.remove(uuid);
-            return Optional.of(data);
-        }
-
-        return Optional.empty();
     }
 }
