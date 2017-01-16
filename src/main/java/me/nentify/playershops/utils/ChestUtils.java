@@ -78,7 +78,7 @@ public class ChestUtils {
                         return;
                     } else {
                         toRemove = toRemove - stackInSlot.getCount();
-                        inv.setInventorySlotContents(i, null);
+                        inv.setInventorySlotContents(i, net.minecraft.item.ItemStack.EMPTY);
                     }
                 }
             }
