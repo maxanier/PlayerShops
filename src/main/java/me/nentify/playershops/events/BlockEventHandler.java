@@ -90,11 +90,12 @@ public class BlockEventHandler {
                             if (player.get(Keys.IS_SNEAKING).orElse(false)) {
                                 player.sendMessage(Text.of(TextColors.AQUA, "This shop is owned by ", owner.getName()));
                             } else {
-                                Location<World> blockDown = blockLoc.get().getBlockRelative(Direction.DOWN);
-                                Optional<TileEntity> te = blockDown.getTileEntity();
 
-                                if (te.isPresent() && te.get() instanceof IInventory) {
-                                    IInventory inv = (IInventory) te.get();
+
+                                IInventory inv = getInventory(blockLoc.get(), player);
+
+                                if (inv != null) {
+
 
                                     if (shopType == ShopType.BUY) {
                                         if (ChestUtils.hasQuantityOfItems(inv, item, quantity)) {
@@ -127,7 +128,9 @@ public class BlockEventHandler {
                                             player.sendMessage(Text.of(TextColors.RED, owner.getName(), " has run out of stock"));
                                         }
                                     } else {
-                                        Inventory inventoryStacks = player.getInventory().queryAny(item);
+                                        ItemStack stackWithNegativeSize = item.copy();
+                                        stackWithNegativeSize.setQuantity(-1);
+                                        Inventory inventoryStacks = player.getInventory().query(stackWithNegativeSize);
                                         Optional<ItemStack> peek = inventoryStacks.peek(quantity);
 
                                         if (peek.isPresent() && peek.get().getQuantity() >= quantity) {
@@ -137,8 +140,8 @@ public class BlockEventHandler {
                                                 BigDecimal tax = BigDecimal.valueOf(Configuration.tax);
 
                                                 ResultType result = EconomyUtils.transferWithTax(
-                                                        account.get(),
                                                         ownerAccount.get(),
+                                                        account.get(),
                                                         defaultCurrency,
                                                         price,
                                                         tax,
@@ -249,5 +252,39 @@ public class BlockEventHandler {
 
         if (playerShopDataOptional.isPresent())
             event.setCancelled(true);
+    }
+
+    private IInventory getInventory(Location<World> blockLoc, Player player) {
+        if (Configuration.chestBelow) {
+            Location<World> blockDown = blockLoc.getBlockRelative(Direction.DOWN);
+            Optional<TileEntity> te = blockDown.getTileEntity();
+            if (te.isPresent() && te.get() instanceof IInventory) {
+                return (IInventory) te.get();
+            }
+        }
+        if (Configuration.chestBehind) {
+            Optional<Direction> dir = blockLoc.getBlock().get(Keys.DIRECTION);
+            if (dir.isPresent()) {
+                Location<World> blockBehind = blockLoc.getBlockRelative(dir.get().getOpposite());
+                Optional<TileEntity> te = blockBehind.getTileEntity();
+                if (te.isPresent() && te.get() instanceof IInventory) {
+                    return (IInventory) te.get();
+                }
+            } else {
+                player.sendMessage(Text.of(TextColors.RED, "Failed to determine direction of sign"));
+            }
+        }
+        String s;
+        if (Configuration.chestBehind && Configuration.chestBelow) {
+            s = "The sign has to be in front or on top of the chest";
+        } else if (Configuration.chestBelow) {
+            s = "The sign has to be on top of the chest";
+        } else if (Configuration.chestBehind) {
+            s = "The sign has to be in front of the chest";
+        } else {
+            s = "This plugin is configured wrong. Either chestBehind or chestBelow has to be activated, or both";
+        }
+        player.sendMessage(Text.of(TextColors.RED, s));
+        return null;
     }
 }

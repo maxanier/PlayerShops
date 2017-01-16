@@ -11,23 +11,15 @@ import java.math.BigDecimal;
 public class EconomyUtils {
 
     public static ResultType transferWithTax(UniqueAccount from, UniqueAccount to, Currency currency, BigDecimal amount, BigDecimal tax, Cause cause) {
-        TransactionResult withdraw = from.withdraw(currency, amount, cause);
-        TransactionResult deposit = to.deposit(currency, amount.multiply(BigDecimal.ONE.subtract(tax)), cause);
+        TransactionResult transfer = from.transfer(to, currency, amount, cause);
 
-        ResultType result = ResultType.SUCCESS;
-
-        if (withdraw.getResult() != ResultType.SUCCESS) {
-            from.deposit(currency, amount, cause);
-            result = withdraw.getResult();
+        if (transfer.getResult() == ResultType.SUCCESS) {
+            TransactionResult withdrawTax = to.withdraw(currency, amount.multiply(tax), cause);
+            if (withdrawTax.getResult() != ResultType.SUCCESS) {
+                //Ignore this as transaction mostly worked
+                System.err.println("Failed to withdraw tax from recipient " + withdrawTax.toString());
+            }
         }
-
-        if (deposit.getResult() != ResultType.SUCCESS) {
-            to.withdraw(currency, amount.multiply(tax), cause);
-
-            if (result == ResultType.SUCCESS)
-                result = deposit.getResult();
-        }
-
-        return result;
+        return transfer.getResult();
     }
 }
