@@ -31,6 +31,11 @@ public class ShopCommand implements CommandExecutor {
                 src.sendMessage(Text.of(TextColors.RED, "No economy plugin is installed"));
                 return CommandResult.success();
             }
+
+            if (price < 0) {
+                src.sendMessage(Text.of(TextColors.RED, "Price has to be higher than zero"));
+                return CommandResult.success();
+            }
             Player player = (Player) src;
 
             Optional<ItemStack> itemStackOptional = player.getItemInHand(HandTypes.MAIN_HAND);
@@ -44,6 +49,11 @@ public class ShopCommand implements CommandExecutor {
                     quantity = quantityOptional.get();
                 else
                     quantity = itemStack.getQuantity();
+
+                if (quantity <= 0) {
+                    player.sendMessage(Text.of(TextColors.RED, "Quantity must be more than zero"));
+                    return CommandResult.success();
+                }
 
                 PlayerShopData serverShopData = new PlayerShopData(shopType, itemStack, price, quantity, player.getUniqueId());
                 PlayerShops.addPlayerShopData(player.getUniqueId(), serverShopData);
