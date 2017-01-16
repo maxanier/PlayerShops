@@ -107,9 +107,10 @@ public class BlockEventHandler {
                                                 );
 
                                                 if (result == ResultType.SUCCESS) {
+                                                    ItemStack itemStack = item.copy();
                                                     ChestUtils.removeItems(inv, item);
-                                                    player.getInventory().offer(item);
-                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", item, " for ", defaultCurrency.format(price), " from ", owner.getName()));
+                                                    player.getInventory().offer(item);//Careful, reduces stacksize of item
+                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", itemStack, " for ", defaultCurrency.format(price), " from ", owner.getName()));
                                                 } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
                                                     player.sendMessage(Text.of(TextColors.RED, "You don't have enough money to buy this"));
                                                 } else if (result == ResultType.ACCOUNT_NO_SPACE) {
@@ -124,7 +125,7 @@ public class BlockEventHandler {
                                             player.sendMessage(Text.of(TextColors.RED, owner.getName(), " has run out of stock"));
                                         }
                                     } else {
-                                        Inventory inventoryStacks = player.getInventory().query(item);
+                                        Inventory inventoryStacks = player.getInventory().queryAny(item);
                                         Optional<ItemStack> peek = inventoryStacks.peek(quantity);
 
                                         if (peek.isPresent() && peek.get().getQuantity() >= quantity) {
