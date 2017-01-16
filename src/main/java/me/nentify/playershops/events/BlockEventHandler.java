@@ -29,7 +29,6 @@ import org.spongepowered.api.service.economy.Currency;
 import org.spongepowered.api.service.economy.account.UniqueAccount;
 import org.spongepowered.api.service.economy.transaction.ResultType;
 import org.spongepowered.api.service.economy.transaction.TransactionResult;
-import org.spongepowered.api.service.economy.transaction.TransferResult;
 import org.spongepowered.api.service.user.UserStorageService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
@@ -38,89 +37,10 @@ import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
 import java.math.BigDecimal;
-import java.util.ConcurrentModificationException;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public class BlockEventHandler {
-
-    @Listener
-    public void onBlockPlace(ChangeBlockEvent.Place event, @Root Player player) {
-        for (Transaction<BlockSnapshot> transaction : event.getTransactions()) {
-            BlockSnapshot blockSnapshot = transaction.getFinal();
-            Optional<Location<World>> blockLocation = blockSnapshot.getLocation();
-
-            if (blockLocation.isPresent()) {
-                Optional<TileEntity> tileEntity = blockLocation.get().getTileEntity();
-
-                if (tileEntity.isPresent() && tileEntity.get() instanceof Sign) {
-                    Sign sign = (Sign) tileEntity.get();
-
-                    Optional<PlayerShopData> playerShopDataOptional = PlayerShops.takePlayerShopData(player.getUniqueId());
-
-                    if (playerShopDataOptional.isPresent()) {
-                        if (Configuration.limitToWorlds != null && !Configuration.limitToWorlds.isEmpty() && !Configuration.limitToWorlds.contains(event.getTargetWorld().getName())) {
-                            player.sendMessage(Text.of(TextColors.RED, "You can not create a shop in this world"));
-                            return;
-                        }
-
-                        PlayerShopData playerShopData = playerShopDataOptional.get();
-
-                        ShopType shopType = playerShopData.getShopType();
-                        int quantity = playerShopData.quantity().get();
-                        ItemStack itemStack = playerShopData.item().get();
-                        BigDecimal price = BigDecimal.valueOf(playerShopData.price().get());
-
-                        SignData signData = sign.getOrCreate(SignData.class).get();
-
-                        Currency defaultCurrency = PlayerShops.instance.economyService.getDefaultCurrency();
-
-                        ListValue<Text> lines = signData.lines();
-                        lines.set(0, Text.of(TextColors.DARK_BLUE, "[", shopType.getName(), "]"));
-                        lines.set(1, Text.of(quantity));
-                        lines.set(2, Text.of(itemStack));
-                        lines.set(3, Text.of(defaultCurrency.getSymbol(), price));
-
-                        double creationCost = Configuration.creationCost;
-
-                        if (creationCost > 0.0) {
-                            Optional<UniqueAccount> account = PlayerShops.instance.economyService.getOrCreateAccount(player.getUniqueId());
-
-                            if (account.isPresent()) {
-                                TransactionResult result = account.get().withdraw(
-                                        defaultCurrency,
-                                        BigDecimal.valueOf(creationCost),
-                                        Cause.source(PlayerShops.instance).build()
-                                );
-
-                                if (result.getResult() == ResultType.ACCOUNT_NO_FUNDS) {
-                                    player.sendMessage(Text.of(TextColors.RED, "You need ", defaultCurrency.format(BigDecimal.valueOf(creationCost)) ," to create a shop"));
-                                    return;
-                                } else if (result.getResult() != ResultType.SUCCESS) {
-                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
-                                    return;
-                                }
-                            }
-                        }
-
-                        sign.offer(playerShopData);
-                        sign.offer(lines);
-
-                        player.sendMessage(Text.of(TextColors.GREEN, "Successfully created ", shopType.toString().toLowerCase(), " shop for ", quantity, " ", itemStack, " for ", defaultCurrency.format(price)));
-                    }
-                }
-            }
-        }
-    }
-
-    @Listener
-    public void onSignChange(ChangeSignEvent event) {
-        Optional<PlayerShopData> playerShopDataOptional = event.getTargetTile().get(PlayerShopData.class);
-
-        if (playerShopDataOptional.isPresent())
-            event.setCancelled(true);
-    }
 
     @Listener
     public void onBlockInteract(InteractBlockEvent.Secondary.MainHand event, @Root Player player) {
@@ -189,9 +109,10 @@ public class BlockEventHandler {
                                                 );
 
                                                 if (result == ResultType.SUCCESS) {
+                                                    ItemStack itemStack = item.copy();
                                                     ChestUtils.removeItems(inv, item);
-                                                    player.getInventory().offer(item);
-                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", item, " for ", defaultCurrency.format(price), " from ", owner.getName()));
+                                                    player.getInventory().offer(item);//Careful, reduces stacksize of item
+                                                    player.sendMessage(Text.of(TextColors.GREEN, "Bought ", quantity, " ", itemStack, " for ", defaultCurrency.format(price), " from ", owner.getName()));
                                                 } else if (result == ResultType.ACCOUNT_NO_FUNDS) {
                                                     player.sendMessage(Text.of(TextColors.RED, "You don't have enough money to buy this"));
                                                 } else if (result == ResultType.ACCOUNT_NO_SPACE) {
@@ -206,7 +127,7 @@ public class BlockEventHandler {
                                             player.sendMessage(Text.of(TextColors.RED, owner.getName(), " has run out of stock"));
                                         }
                                     } else {
-                                        Inventory inventoryStacks = player.getInventory().query(item);
+                                        Inventory inventoryStacks = player.getInventory().queryAny(item);
                                         Optional<ItemStack> peek = inventoryStacks.peek(quantity);
 
                                         if (peek.isPresent() && peek.get().getQuantity() >= quantity) {
@@ -251,5 +172,82 @@ public class BlockEventHandler {
                 }
             }
         }
+    }
+
+    @Listener
+    public void onBlockPlace(ChangeBlockEvent.Place event, @Root Player player) {
+        for (Transaction<BlockSnapshot> transaction : event.getTransactions()) {
+            BlockSnapshot blockSnapshot = transaction.getFinal();
+            Optional<Location<World>> blockLocation = blockSnapshot.getLocation();
+
+            if (blockLocation.isPresent()) {
+                Optional<TileEntity> tileEntity = blockLocation.get().getTileEntity();
+
+                if (tileEntity.isPresent() && tileEntity.get() instanceof Sign) {
+                    Sign sign = (Sign) tileEntity.get();
+
+                    Optional<PlayerShopData> playerShopDataOptional = PlayerShops.takePlayerShopData(player.getUniqueId());
+
+                    if (playerShopDataOptional.isPresent()) {
+                        if (Configuration.limitToWorlds != null && !Configuration.limitToWorlds.isEmpty() && !Configuration.limitToWorlds.contains(event.getTargetWorld().getName())) {
+                            player.sendMessage(Text.of(TextColors.RED, "You can not create a shop in this world"));
+                            return;
+                        }
+
+                        PlayerShopData playerShopData = playerShopDataOptional.get();
+
+                        ShopType shopType = playerShopData.getShopType();
+                        int quantity = playerShopData.quantity().get();
+                        ItemStack itemStack = playerShopData.item().get();
+                        BigDecimal price = BigDecimal.valueOf(playerShopData.price().get());
+
+                        SignData signData = sign.getOrCreate(SignData.class).get();
+
+                        Currency defaultCurrency = PlayerShops.instance.economyService.getDefaultCurrency();
+
+                        ListValue<Text> lines = signData.lines();
+                        lines.set(0, Text.of(TextColors.DARK_BLUE, "[", shopType.getName(), "]"));
+                        lines.set(1, Text.of(quantity));
+                        lines.set(2, Text.of(itemStack));
+                        lines.set(3, Text.of(defaultCurrency.getSymbol(), price));
+
+                        double creationCost = Configuration.creationCost;
+
+                        if (creationCost > 0.0) {
+                            Optional<UniqueAccount> account = PlayerShops.instance.economyService.getOrCreateAccount(player.getUniqueId());
+
+                            if (account.isPresent()) {
+                                TransactionResult result = account.get().withdraw(
+                                        defaultCurrency,
+                                        BigDecimal.valueOf(creationCost),
+                                        Cause.source(PlayerShops.instance).build()
+                                );
+
+                                if (result.getResult() == ResultType.ACCOUNT_NO_FUNDS) {
+                                    player.sendMessage(Text.of(TextColors.RED, "You need ", defaultCurrency.format(BigDecimal.valueOf(creationCost)), " to create a shop"));
+                                    return;
+                                } else if (result.getResult() != ResultType.SUCCESS) {
+                                    player.sendMessage(Text.of(TextColors.RED, "Error during transaction"));
+                                    return;
+                                }
+                            }
+                        }
+
+                        sign.offer(playerShopData);
+                        sign.offer(lines);
+
+                        player.sendMessage(Text.of(TextColors.GREEN, "Successfully created ", shopType.toString().toLowerCase(), " shop for ", quantity, " ", itemStack, " for ", defaultCurrency.format(price)));
+                    }
+                }
+            }
+        }
+    }
+
+    @Listener
+    public void onSignChange(ChangeSignEvent event) {
+        Optional<PlayerShopData> playerShopDataOptional = event.getTargetTile().get(PlayerShopData.class);
+
+        if (playerShopDataOptional.isPresent())
+            event.setCancelled(true);
     }
 }
